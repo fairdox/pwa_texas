@@ -124,6 +124,26 @@
         .alert-bg {
             animation: bg-alert 1s infinite;
         }
+        .settings-cog {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 1.5rem;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+            line-height: 1;
+        }
+
+        .settings-cog:hover {
+            background: rgba(255, 255, 255, 0.3);
+            color: #fff;
+            transform: rotate(45deg);
+        }
     </style>
 </head>
 <body>
@@ -152,6 +172,9 @@
             <div class="btn" id="prev-btn" onclick="previousLevel()">&larr;</div>
             <div class="btn" id="play-btn" onclick="togglePlay()">PAUSE</div>
             <div class="btn" id="next-btn" onclick="nextLevel()">&rarr;</div>
+        </div>
+        <div class="interactive">
+            <button class="settings-cog" onclick="returnToConfig()">&#9881;</button>
         </div>
     </div>
 
@@ -357,6 +380,13 @@
                 updateDisplay();
             }
         }
+        function returnToConfig() {
+            // Grab the existing search parameters from the current URL
+            const currentParams = window.location.search;
+            
+            // Redirect back to the configuration page with those parameters attached
+            window.location.href = `pwa_texas.html${currentParams}`;
+        }        
     </script>
 </body>
 </html>
