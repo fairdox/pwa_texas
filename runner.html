@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Poker Tournament Runner</title>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800&display=swap" rel="stylesheet">
 
     <style>
         body, html {
@@ -266,20 +266,24 @@
                 // Segment reached zero
                 if (currentIndex === -1) {
                     // Pre-game countdown finished, transfer over to Level 1 paused
-                    goToIndex(0);
+                    goToIndex(0,true);
+                    
                 } else {
                     // Active level expired, step forward to next state frame
-                    nextLevel();
+                    if (schedule[currentIndex].type==='BREAK')
+                        nextLevel(true);
+                    else
+                        nextLevel(false);
                 }
             }
             updateDisplay();
         }
 
-        function goToIndex(index) {
+        function goToIndex(index, paused=false) {
             if (index >= 0 && index < schedule.length) {
                 currentIndex = index;
                 timeLeft = schedule[currentIndex].duration;
-                isPaused = true; // Always require manual confirmation/resume on entering a new segment block
+                isPaused = paused; // require or not manual confirmation/resume on entering a new segment block
             }
         }
 
@@ -331,16 +335,16 @@
             updateDisplay();
         }
 
-        function nextLevel() {
+        function nextLevel(paused=true) {
             if (currentIndex < schedule.length - 1) {
-                goToIndex(currentIndex + 1);
+                goToIndex(currentIndex + 1, paused);
                 updateDisplay();
             }
         }
 
         function previousLevel() {
             if (currentIndex > 0) {
-                goToIndex(currentIndex - 1);
+                goToIndex(currentIndex - 1, true);
                 updateDisplay();
             } else if (currentIndex === 0) {
                 // Restarting level 1
