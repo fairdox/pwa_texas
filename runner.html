@@ -303,10 +303,14 @@
                 playBtn.textContent = "PAUSE";
             }
 
-            // Format internal clock view (mm:ss) or handle hour rollovers cleanly
-            const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+            // Format internal clock view (hh:mm:ss) or handle hour rollovers cleanly
+            const h = Math.floor(timeLeft / 3600).toString().padStart(2, '0');
+            const m = Math.floor( (timeLeft-(h*3600)) / 60).toString().padStart(2, '0');
             const s = (timeLeft % 60).toString().padStart(2, '0');
-            timerDisp.textContent = `${m}:${s}`;
+            if (currentIndex===-1 || timeLeft>3600) // pregame show hours left
+                timerDisp.textContent = `${h}:${m}:${s}`;
+            else
+                timerDisp.textContent = `${m}:${s}`;
 
             if (currentIndex === -1) {
                 statusMsg.textContent = `Game starts at ${startH}:${startM}`;
