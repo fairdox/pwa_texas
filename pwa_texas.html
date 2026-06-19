@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual Poker Blind Schedule Tester</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 700px;
+            margin: 20px auto;
+            padding: 0 15px;
+            color: #333;
+        }
+        .input-group {
+            margin-bottom: 12px;
+        }
+        label {
+            display: inline-block;
+            width: 250px;
+            font-weight: bold;
+        }
+        input, textarea {
+            padding: 5px;
+            width: 120px;
+            box-sizing: border-box;
+        }
+        textarea {
+            width: 100%;
+            height: 50px;
+            font-family: monospace;
+        }
+        button {
+            margin-top: 10px;
+            padding: 8px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .url-box {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border: 1px solid #ced4da;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .break-row {
+            background-color: #fff3cd;
+            font-weight: bold;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Manual Poker Blind Schedule Tester</h2>
+    
+    <div class="input-group">
+        <label for="title">Game title:</label>
+        <input type="text" id="title" value="">
+    </div>
+
+    <div class="input-group">
+        <label for="startTime">Starting Time:</label>
+        <input type="time" id="startTime" value="19:00">
+    </div>
+
+    <div class="input-group">
+        <label for="slideShow">Google slide show URL:</label>
+        <input type="text" id="slideShow" value="">
+    </div>
+    
+    <div class="input-group">
+        <label for="players">Number of Players:</label>
+        <input type="number" id="players" value="6">
+    </div>
+    
+    <div class="input-group">
+        <label for="chips">Chips per Player:</label>
+        <input type="number" id="chips" value="1500">
+    </div>
+
+    <div class="input-group">
+        <label for="breakAfterHours">Break After (Hours):</label>
+        <input type="number" id="breakAfterHours" value="2" step="0.5">
+    </div>
+
+    <div class="input-group">
+        <label for="durationBefore">Level Duration Before Break (Min):</label>
+        <input type="number" id="durationBefore" value="20">
+    </div>
+
+    <div class="input-group">
+        <label for="durationAfter">Level Duration After Break (Min):</label>
+        <input type="number" id="durationAfter" value="15">
+    </div>
+
+    <div class="input-group" style="margin-top: 15px;">
+        <label for="sbList" style="display: block; width: 100%; margin-bottom: 5px;">Small Blinds List (comma separated):</label>
+        <textarea id="sbList">25,50,100,200,300,400,500,1000,2000,5000</textarea>
+    </div>
+
+    <button onclick="generateSchedule()">Test Schedule</button>
+    <button onclick="runTournament()">Run Schedule</button>
+
+    <div id="urlContainer" style="display:none; margin-top: 15px;">
+        <strong>Shareable Configuration URL (copy for future use):</strong>
+        <div class="url-box" id="urlDisplay"></div>
+    </div>
+
+    <table id="scheduleTable" style="display:none;">
+        <thead>
+            <tr>
+                <th>Level #</th>
+                <th>Start Time</th>
+                <th>Small Blind</th>
+                <th>Big Blind</th>
+                <th>BB % of Total Chips</th>
+            </tr>
+        </thead>
+        <tbody id="scheduleBody"></tbody>
+    </table>
+
+    <script>
+        // Run on page load to check for URL parameters
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            if (urlParams.has('players')) {
+                document.getElementById('title').value = urlParams.get('gameTitle');
+                document.getElementById('startTime').value = urlParams.get('startTime');
+                document.getElementById('slideShow').value = urlParams.get('slideShow');
+                document.getElementById('players').value = urlParams.get('players');
+                document.getElementById('chips').value = urlParams.get('chips');
+                document.getElementById('breakAfterHours').value = urlParams.get('breakAfterHours');
+                document.getElementById('durationBefore').value = urlParams.get('durationBefore');
+                document.getElementById('durationAfter').value = urlParams.get('durationAfter');
+                document.getElementById('sbList').value = urlParams.get('sbList');
+                
+                // Automatically generate the schedule if parameters exist
+                generateSchedule();
+            }
+        };
+
+        function formatTime(date) {
+            let hours = date.getHours().toString().padStart(2, '0');
+            let minutes = date.getMinutes().toString().padStart(2, '0');
+            return `${hours}:${minutes}`;
+        }
+
+        function generateSchedule() {
+            // 1. Gather Inputs
+            const title = document.getElementById('title').value;
+            const slideShow = document.getElementById('slideShow').value;
+            const startTimeStr = document.getElementById('startTime').value;
+            const players = document.getElementById('players').value;
+            const chips = document.getElementById('chips').value;
+            const breakAfterHours = document.getElementById('breakAfterHours').value;
+            const durationBeforeVal = document.getElementById('durationBefore').value;
+            const durationAfterVal = document.getElementById('durationAfter').value;
+            const sbInput = document.getElementById('sbList').value;
+
+            const N = parseInt(players);
+            const T = parseInt(chips);
+            const totalChips = N * T;
+            const breakAfterMinutes = parseFloat(breakAfterHours) * 60;
+            const durationBefore = parseInt(durationBeforeVal);
+            const durationAfter = parseInt(durationAfterVal);
+            
+            // Parse custom blinds array
+            const smallBlinds = sbInput.split(',').map(num => parseInt(num.trim())).filter(num => !isNaN(num));
+
+            // Setup clock baseline
+            const baseDate = new Date();
+            const [startH, startM] = startTimeStr.split(':');
+            baseDate.setHours(parseInt(startH), parseInt(startM), 0, 0);
+
+            let currentClock = new Date(baseDate.getTime());
+            let elapsedMinutes = 0;
+            let breakInserted = false;
+
+            const tbody = document.getElementById('scheduleBody');
+            tbody.innerHTML = '';
+
+            // 2. Loop over parsed manual entries
+            for (let i = 0; i < smallBlinds.length; i++) {
+                if (elapsedMinutes >= breakAfterMinutes && !breakInserted) {
+                    const breakRow = `<tr class="break-row">
+                        <td>BREAK</td>
+                        <td>${formatTime(currentClock)}</td>
+                        <td colspan="3">15-Minute Intermission</td>
+                    </tr>`;
+                    tbody.innerHTML += breakRow;
+                    
+                    currentClock.setMinutes(currentClock.getMinutes() + 15);
+                    breakInserted = true;
+                }
+
+                const sb = smallBlinds[i];
+                const bb = sb * 2;
+                const percentage = ((bb / totalChips) * 100).toFixed(2);
+                const currentLevelDuration = breakInserted ? durationAfter : durationBefore;
+
+                const row = `<tr>
+                    <td>Level ${i + 1}</td>
+                    <td>${formatTime(currentClock)}</td>
+                    <td>${sb}</td>
+                    <td>${bb}</td>
+                    <td>${percentage}%</td>
+                </tr>`;
+                tbody.innerHTML += row;
+
+                currentClock.setMinutes(currentClock.getMinutes() + currentLevelDuration);
+                elapsedMinutes += currentLevelDuration;
+            }
+
+            // 3. Generate and display the Shareable URL
+            const params = new URLSearchParams();
+            if (title)   params.set('gameTitle', title);
+            if (slideShow) params.set('slideShow', slideShow);
+            params.set('startTime', startTimeStr);
+            params.set('players', players);
+            params.set('chips', chips);
+            params.set('breakAfterHours', breakAfterHours);
+            params.set('durationBefore', durationBeforeVal);
+            params.set('durationAfter', durationAfterVal);
+            params.set('sbList', sbInput.replace(/\s+/g, '')); // Clean whitespace for cleaner URL
+
+            const shareableURL = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+            
+            document.getElementById('urlDisplay').textContent = shareableURL;
+            document.getElementById('urlContainer').style.display = 'block';
+            document.getElementById('scheduleTable').style.display = 'table';
+        }
+
+        function runTournament() {
+            // 1. Gather the parameters (same as your generateSchedule logic)
+            const params = new URLSearchParams();
+            const title = document.getElementById('title').value;
+            const slideShow = document.getElementById('slideShow').value;
+
+            if (title)  params.set('gameTitle', title);
+            if (slideShow) params.set('slideShow', slideShow);
+            params.set('startTime', document.getElementById('startTime').value);
+            params.set('players', document.getElementById('players').value);
+            params.set('chips', document.getElementById('chips').value);
+            params.set('breakAfterHours', document.getElementById('breakAfterHours').value);
+            params.set('durationBefore', document.getElementById('durationBefore').value);
+            params.set('durationAfter', document.getElementById('durationAfter').value);
+            params.set('sbList', document.getElementById('sbList').value.replace(/\s+/g, ''));
+
+            // 2. Redirect to the runner page
+            window.location.href = `runner.html?${params.toString()}`;
+        }        
+        
+    </script>
+</body>
+</html>

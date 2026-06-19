@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poker Tournament Runner</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800&display=swap" rel="stylesheet">
+
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: #fff;
+            font-family: sans-serif;
+            overflow: hidden;
+        }
+        /* Background slideshow container placeholder */
+        #slideshow-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        #slideshow-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        /* Foreground overlay UI */
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-sizing: border-box;
+            padding: 30px;
+            background: rgba(0, 0, 0, 0.4); /* subtle dark tint over slides */
+            pointer-events: none; /* ensure clicks drop through if needed, except controls */
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        .title {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Montserrat', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        #title-message {
+            font-size: 2.5rem; 
+            color: #07b5ff;
+            /* Adds high contrast against changing slideshow backgrounds */
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8), -1px -1px 0px rgba(0, 0, 0, 0.9);
+            font-weight: 800;
+        }        
+
+        .top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #current-time {
+            font-size: 2.5rem;
+            font-weight: bold;
+        }
+        #blind-display {
+            font-size: 5rem;
+            font-weight: bold;
+            text-align: center;
+            width: 100%;
+            margin-top: 40px;
+        }
+        #timer-display {
+            font-size: 9rem;
+            font-weight: bold;
+            text-align: center;
+            font-family: monospace;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-bottom: 20px;
+        }
+        .btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid #fff;
+            color: #fff;
+            font-size: 2rem;
+            padding: 15px 30px;
+            cursor: pointer;
+            border-radius: 10px;
+            min-width: 100px;
+            text-align: center;
+        }
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+        /* Animations */
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .flashing-btn {
+            animation: flash 1s infinite;
+        }
+        @keyframes bg-alert {
+            0%, 100% { background-color: rgba(0,0,0,0.4); }
+            50% { background-color: rgba(255, 0, 0, 0.5); }
+        }
+        .alert-bg {
+            animation: bg-alert 1s infinite;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="slideshow-container">
+        <iframe id="slideshow-frame" 
+                src="">
+        </iframe>
+    </div>    
+
+    <div id="overlay">
+        <div class="title">
+            <div id="title-message"></div>
+        </div>
+
+        <div class="top-row">
+            <div id="status-message" style="font-size: 1.5rem; color: #ffc107;"></div>
+            <div id="current-time">00:00</div>
+        </div>
+
+        <div id="blind-display">LOADING SYSTEM...</div>
+        
+        <div id="timer-display">00:00</div>
+
+        <div class="controls interactive">
+            <div class="btn" id="prev-btn" onclick="previousLevel()">&larr;</div>
+            <div class="btn" id="play-btn" onclick="togglePlay()">PAUSE</div>
+            <div class="btn" id="next-btn" onclick="nextLevel()">&rarr;</div>
+        </div>
+    </div>
+
+    <script>
+        // --- State Variables ---
+        let schedule = [];
+        let currentIndex = -1; // -1 means pre-game countdown
+        let timeLeft = 0;      // seconds left in current block
+        let isPaused = true;
+        let totalChips = 0;
+        let officialStartDate = null;
+        let startH = null;
+        let startM = null;
+
+        // --- Core Initialization ---
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            if (!urlParams.has('players')) {
+                document.getElementById('blind-display').textContent = "ERROR: Missing Configuration Parameters";
+                return;
+            }
+
+            // Parse configuration
+            const N = parseInt(urlParams.get('players'));
+            const T = parseInt(urlParams.get('chips'));
+            totalChips = N * T;
+
+            const title = urlParams.get('gameTitle');
+            const startTimeStr = urlParams.get('startTime');
+            const slideShow = urlParams.get('slideShow');
+            const breakAfterMinutes = parseFloat(urlParams.get('breakAfterHours')) * 60;
+            const durationBefore = parseInt(urlParams.get('durationBefore')) * 60; // to seconds
+            const durationAfter = parseInt(urlParams.get('durationAfter')) * 60;   // to seconds
+            const sbInput = urlParams.get('sbList');
+            const smallBlinds = sbInput.split(',').map(num => parseInt(num.trim())).filter(num => !isNaN(num));
+
+            if (title){
+                document.getElementById('title-message').textContent = title;
+            }
+
+            // Build slideshow source if parameter exists down the road
+            if (slideShow){
+                document.getElementById('slideshow-frame').src = slideShow;
+            }
+
+            // Parse official start clock time today
+            const now = new Date();
+            officialStartDate = new Date(now.getTime());
+            [startH, startM] = startTimeStr.split(':');
+            officialStartDate.setHours(parseInt(startH), parseInt(startM), 0, 0);
+
+            // Construct structural sequence array (Mix of levels and breaks)
+            let runningElapsed = 0;
+            let breakInserted = false;
+
+            for (let i = 0; i < smallBlinds.length; i++) {
+                if (runningElapsed >= breakAfterMinutes && !breakInserted) {
+                    schedule.push({
+                        type: 'BREAK',
+                        label: 'BREAK TIME',
+                        duration: 15 * 60, // 15 mins in seconds
+                        blinds: 'Intermission'
+                    });
+                    breakInserted = true;
+                    runningElapsed += 15;
+                }
+
+                const currentDuration = breakInserted ? durationAfter : durationBefore;
+                schedule.push({
+                    type: 'LEVEL',
+                    label: `Level ${i + 1}`,
+                    duration: currentDuration,
+                    blinds: `${smallBlinds[i]} / ${smallBlinds[i] * 2}`
+                });
+                runningElapsed += (currentDuration / 60);
+            }
+
+            // Determine if we are starting before the official game time, or late match drop-in
+            if (now < officialStartDate) {
+                currentIndex = -1;
+                timeLeft = Math.floor((officialStartDate.getTime() - now.getTime()) / 1000);
+                isPaused = false; // Countdown to startup rolls automatically
+            } else {
+                // Already past start time, go straight to level 1 and await manual start
+                goToIndex(0);
+            }
+
+            // Launch ticker processing loops
+            setInterval(updateWallClock, 1000);
+            setInterval(tickSecond, 1000);
+            
+            updateDisplay();
+        };
+
+        // --- Core Tick Processing ---
+        function updateWallClock() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = 
+                `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        }
+
+        function tickSecond() {
+            if (isPaused) return;
+
+            if (timeLeft > 0) {
+                timeLeft--;
+                
+                // Real-time animation logic checks
+                handleVisualEffects();
+            } else {
+                // Segment reached zero
+                if (currentIndex === -1) {
+                    // Pre-game countdown finished, transfer over to Level 1 paused
+                    goToIndex(0);
+                } else {
+                    // Active level expired, step forward to next state frame
+                    nextLevel();
+                }
+            }
+            updateDisplay();
+        }
+
+        function goToIndex(index) {
+            if (index >= 0 && index < schedule.length) {
+                currentIndex = index;
+                timeLeft = schedule[currentIndex].duration;
+                isPaused = true; // Always require manual confirmation/resume on entering a new segment block
+            }
+        }
+
+        // --- Screen Rendering Layouts ---
+        function updateDisplay() {
+            const playBtn = document.getElementById('play-btn');
+            const statusMsg = document.getElementById('status-message');
+            const blindDisp = document.getElementById('blind-display');
+            const timerDisp = document.getElementById('timer-display');
+
+            // Manage Pause Flashing State Classes
+            if (isPaused && currentIndex >= 0) {
+                playBtn.classList.add('flashing-btn');
+                playBtn.textContent = "RESUME";
+            } else {
+                playBtn.classList.remove('flashing-btn');
+                playBtn.textContent = "PAUSE";
+            }
+
+            // Format internal clock view (mm:ss) or handle hour rollovers cleanly
+            const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+            const s = (timeLeft % 60).toString().padStart(2, '0');
+            timerDisp.textContent = `${m}:${s}`;
+
+            if (currentIndex === -1) {
+                statusMsg.textContent = `Game starts at ${startH}:${startM}`;
+                blindDisp.textContent = "Get Ready";
+            } else {
+                const currentSegment = schedule[currentIndex];
+                statusMsg.textContent = currentSegment.label;
+                blindDisp.textContent = currentSegment.blinds;
+            }
+        }
+
+        function handleVisualEffects() {
+            const overlay = document.getElementById('overlay');
+            // Flash background grid red during the final critical 10 seconds of an active level
+            if (timeLeft <= 10 && timeLeft > 0 && currentIndex >= 0 && !isPaused) {
+                overlay.classList.add('alert-bg');
+            } else {
+                overlay.classList.remove('alert-bg');
+            }
+        }
+
+        // --- Interactive Controller Actions ---
+        function togglePlay() {
+            if (currentIndex === -1) return; // Can't pause the concrete pre-game wall-clock counter
+            isPaused = !isPaused;
+            updateDisplay();
+        }
+
+        function nextLevel() {
+            if (currentIndex < schedule.length - 1) {
+                goToIndex(currentIndex + 1);
+                updateDisplay();
+            }
+        }
+
+        function previousLevel() {
+            if (currentIndex > 0) {
+                goToIndex(currentIndex - 1);
+                updateDisplay();
+            } else if (currentIndex === 0) {
+                // Restarting level 1
+                timeLeft = schedule[0].duration;
+                isPaused = true;
+                updateDisplay();
+            }
+        }
+    </script>
+</body>
+</html>
