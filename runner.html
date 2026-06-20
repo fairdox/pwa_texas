@@ -61,7 +61,7 @@
         
         #title-message {
             font-size: 2.5rem; 
-            color: #07b5ff;
+            color: #07ff28;
             /* Adds high contrast against changing slideshow backgrounds */
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8), -1px -1px 0px rgba(0, 0, 0, 0.9);
             font-weight: 800;
@@ -151,6 +151,7 @@
     <div id="slideshow-container">
         <iframe id="slideshow-frame" 
                 src="">
+         Thames
         </iframe>
     </div>    
 
@@ -178,6 +179,10 @@
         </div>
     </div>
 
+    <audio id="countdown-sound1" src="sounds/gong1.mp3" preload="auto"></audio>
+    <audio id="countdown-sound2" src="sounds/gong2.mp3" preload="auto"></audio>
+    <audio id="countdown-soundFinal" src="sounds/gongFinal.mp3" preload="auto"></audio>
+
     <script>
         // --- State Variables ---
         let schedule = [];
@@ -188,6 +193,12 @@
         let officialStartDate = null;
         let startH = null;
         let startM = null;
+        let levelEndTime = null; // System timestamp marking when current step ends
+        const alarmSound1 = document.getElementById('countdown-sound1');
+        const alarmSoundFinal = document.getElementById('countdown-soundFinal');
+        const alarmPool =  [alarmSound1,alarmSound1,alarmSound1, alarmSoundFinal];
+        let poolIndex = 0;
+        let lastPlayedSecond = null; // Tracks the last second that triggered an audio chime
 
         // --- Core Initialization ---
         window.onload = function() {
@@ -257,17 +268,14 @@
             if (now < officialStartDate) {
                 currentIndex = -1;
                 timeLeft = Math.floor((officialStartDate.getTime() - now.getTime()) / 1000);
-                isPaused = false; // Countdown to startup rolls automatically
+                isPaused = false; 
+                levelEndTime = Date.now() + (timeLeft * 1000); // Anchor pregame countdown wall clock
             } else {
                 // Already past start time, go straight to level 1 and await manual start
-                goToIndex(0);
+                goToIndex(0, true);
             }
 
-            // Launch ticker processing loops
-            setInterval(updateWallClock, 1000);
-            setInterval(tickSecond, 1000);
-            
-            updateDisplay();
+            runPrecisionLoop();
         };
 
         // --- Core Tick Processing ---
@@ -277,36 +285,52 @@
                 `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
         }
 
-        function tickSecond() {
-            if (isPaused) return;
+        function runPrecisionLoop() {
+            // 1. Constantly update the wall clock display in real-time
+            updateWallClock();
 
-            if (timeLeft > 0) {
-                timeLeft--;
+            // 2. Process the timer calculation if the game is active
+            if (!isPaused) {
+                const remainingMs = levelEndTime - Date.now();
                 
-                // Real-time animation logic checks
+                // Use Math.max to prevent negative numbers, and floor/ceil safely
+                timeLeft = Math.max(0, Math.ceil(remainingMs / 1000));
+
+                // Run visual effects and audio checks dozens of times per second safely
                 handleVisualEffects();
-            } else {
-                // Segment reached zero
-                if (currentIndex === -1) {
-                    // Pre-game countdown finished, transfer over to Level 1 paused
-                    goToIndex(0,true);
-                    
-                } else {
-                    // Active level expired, step forward to next state frame
-                    if (schedule[currentIndex].type==='BREAK')
-                        nextLevel(true);
-                    else
-                        nextLevel(false);
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    // Segment reached zero
+                    if (currentIndex === -1) {
+                        // Pre-game countdown finished, transfer over to Level 1 paused
+                        goToIndex(0, true);
+                    } else {
+                        // Active level expired, step forward to next state frame
+                        if (schedule[currentIndex].type === 'BREAK')
+                            nextLevel(true);
+                        else
+                            nextLevel(false);
+                    }
+
                 }
+
             }
+
+            // 3. Render changes smoothly to the screen
             updateDisplay();
-        }
+
+            // 4. Keep the loop running seamlessly
+            requestAnimationFrame(runPrecisionLoop);
+        }        
 
         function goToIndex(index, paused=false) {
             if (index >= 0 && index < schedule.length) {
                 currentIndex = index;
                 timeLeft = schedule[currentIndex].duration;
-                isPaused = paused; // require or not manual confirmation/resume on entering a new segment block
+                isPaused = paused; 
+                if (!isPaused) {
+                    levelEndTime = Date.now() + (timeLeft * 1000);
+                }
             }
         }
 
@@ -328,9 +352,9 @@
 
             // Format internal clock view (hh:mm:ss) or handle hour rollovers cleanly
             const h = Math.floor(timeLeft / 3600).toString().padStart(2, '0');
-            const m = Math.floor( (timeLeft-(h*3600)) / 60).toString().padStart(2, '0');
+            const m = Math.floor((timeLeft - (h * 3600)) / 60).toString().padStart(2, '0');
             const s = (timeLeft % 60).toString().padStart(2, '0');
-            if (currentIndex===-1 || timeLeft>3600) // pregame show hours left
+            if (currentIndex === -1 || timeLeft > 3600) // pregame show hours left
                 timerDisp.textContent = `${h}:${m}:${s}`;
             else
                 timerDisp.textContent = `${m}:${s}`;
@@ -347,11 +371,25 @@
 
         function handleVisualEffects() {
             const overlay = document.getElementById('overlay');
+            
             // Flash background grid red during the final critical 10 seconds of an active level
-            if (timeLeft <= 10 && timeLeft > 0 && currentIndex >= 0 && !isPaused) {
+            if (timeLeft <= 10 && timeLeft >= 0 && currentIndex >= 0 && !isPaused) {
                 overlay.classList.add('alert-bg');
+                
+                // Trigger localized HTML5 audio chime precisely x second drop boundaries
+                // add a 4th value to hear the final gong <<<<
+                if ((timeLeft === 6 || timeLeft === 4 || timeLeft === 2)
+                     && lastPlayedSecond !== timeLeft) {
+                    lastPlayedSecond = timeLeft; // Lock this second so it won't re-trigger
+                    const alarmSound = alarmPool[poolIndex];
+                    alarmSound.currentTime = 0;
+                    alarmSound.play().catch(e => console.log("Audio playback deferred pending interactions:", e));
+                    poolIndex = (poolIndex + 1) % alarmPool.length;                    
+                }
             } else {
                 overlay.classList.remove('alert-bg');
+                lastPlayedSecond = null; // Reset when out of the danger zone or paused
+                poolIndex = 0;
             }
         }
 
@@ -359,12 +397,20 @@
         function togglePlay() {
             if (currentIndex === -1) return; // Can't pause the concrete pre-game wall-clock counter
             isPaused = !isPaused;
+            
+            if (!isPaused) {
+                // When unpausing, re-calculate the future completion milestone target timestamp
+                levelEndTime = Date.now() + (timeLeft * 1000);
+            }
             updateDisplay();
         }
 
         function nextLevel(paused=true) {
             if (currentIndex < schedule.length - 1) {
                 goToIndex(currentIndex + 1, paused);
+                if (!paused) {
+                    levelEndTime = Date.now() + (timeLeft * 1000);
+                }
                 updateDisplay();
             }
         }
@@ -380,6 +426,7 @@
                 updateDisplay();
             }
         }
+        
         function returnToConfig() {
             // Grab the existing search parameters from the current URL
             const currentParams = window.location.search;
